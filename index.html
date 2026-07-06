@@ -1,0 +1,780 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<meta name="theme-color" content="#111111">
+<title>BOL 發票 / 收據產生器</title>
+<style>
+  :root{
+    --ink:#111;
+    --line:#111;
+    --muted:#555;
+    --bg:#e9eaec;
+    --panel:#fff;
+    --accent:#111;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%}
+  body{
+    font-family:"PingFang TC","Microsoft JhengHei","Heiti TC","Noto Sans TC",sans-serif;
+    color:var(--ink);background:var(--bg);
+    display:flex;min-height:100vh;
+  }
+
+  /* ---------- 左邊控制面板（只喺螢幕見，列印時收埋） ---------- */
+  .controls{
+    width:400px;min-width:400px;background:var(--panel);
+    border-right:1px solid #ccc;padding:18px 18px 60px;
+    overflow:auto;height:100vh;position:sticky;top:0;
+  }
+  .controls h1{font-size:17px;margin:0 0 4px}
+  .controls .sub{font-size:12px;color:var(--muted);margin:0 0 16px;line-height:1.5}
+  .fieldset{border:1px solid #e2e2e2;border-radius:8px;padding:12px;margin-bottom:14px}
+  .fieldset > legend{font-size:12px;color:var(--muted);padding:0 6px}
+  label.lb{display:block;font-size:12px;color:#333;margin:10px 0 4px;font-weight:600}
+  input[type=text],input[type=number],input[type=date],select,textarea{
+    width:100%;padding:8px 9px;border:1px solid #ccc;border-radius:6px;
+    font-size:13px;font-family:inherit;background:#fff;
+  }
+  textarea{resize:vertical;min-height:52px}
+  .row2{display:flex;gap:8px}
+  .row2 > *{flex:1}
+  .seg{display:flex;border:1px solid #ccc;border-radius:6px;overflow:hidden}
+  .seg button{flex:1;border:0;background:#fff;padding:8px 4px;font-size:12.5px;cursor:pointer;font-family:inherit;color:#333}
+  .seg button.on{background:#111;color:#fff}
+  .items .item{border:1px solid #eee;border-radius:6px;padding:8px;margin-top:8px;position:relative;background:#fafafa}
+  .items .item .del{position:absolute;top:6px;right:6px;border:0;background:#eee;border-radius:4px;cursor:pointer;font-size:11px;padding:2px 6px}
+  .addbtn{margin-top:8px;width:100%;padding:8px;border:1px dashed #aaa;background:#fff;border-radius:6px;cursor:pointer;font-size:12.5px;color:#333}
+  .actions{position:sticky;bottom:0;background:#fff;padding-top:12px;margin-top:14px;border-top:1px solid #eee}
+  .btn{width:100%;padding:12px;border:0;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit}
+  .btn.print{background:#111;color:#fff}
+  .btn.ghost{background:#f2f2f2;color:#222;margin-top:8px;font-weight:600;font-size:13px;padding:9px}
+  .hint{font-size:11px;color:var(--muted);margin-top:6px;line-height:1.5}
+  .linkbtn{background:none;border:0;color:#0a58ca;cursor:pointer;font-size:12px;text-decoration:underline;padding:0}
+  .modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.45);display:none;align-items:flex-start;justify-content:center;z-index:50;overflow:auto;padding:30px 12px}
+  .modal-bg.open{display:flex}
+  .modal{background:#fff;border-radius:10px;max-width:560px;width:100%;padding:20px}
+  .modal h2{font-size:16px;margin:0 0 12px}
+  .modal .co-block{border:1px solid #e2e2e2;border-radius:8px;padding:12px;margin-bottom:14px}
+  .logo-prev{height:40px;margin-top:6px}
+
+  /* 歷史單據 */
+  .modal.wide{max-width:640px}
+  .hist-tools{display:flex;gap:8px;margin-bottom:10px}
+  .hist-tools select{flex:1}
+  .hist-row{display:flex;align-items:center;gap:10px;border:1px solid #e2e2e2;border-radius:8px;padding:10px;margin-bottom:8px}
+  .hist-main{flex:1;min-width:0}
+  .hist-num{font-size:14px;font-weight:700}
+  .hist-badge{display:inline-block;font-size:10px;font-weight:700;background:#111;color:#fff;border-radius:4px;padding:1px 6px;margin-left:6px;vertical-align:middle}
+  .hist-sub{font-size:11.5px;color:var(--muted);margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .hist-btns{display:flex;gap:6px;flex-shrink:0}
+  .hbtn{border:1px solid #ccc;background:#fff;border-radius:6px;padding:6px 9px;font-size:12px;cursor:pointer;font-family:inherit}
+  .hbtn.load{background:#111;color:#fff;border-color:#111}
+  .hbtn.del{color:#c00}
+
+  /* 提示 toast */
+  #toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%) translateY(20px);
+    background:#111;color:#fff;padding:10px 18px;border-radius:8px;font-size:13px;
+    opacity:0;pointer-events:none;transition:.2s;z-index:99}
+  #toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+  .editing-tag{display:none;font-size:11px;color:#0a58ca;font-weight:700;margin-top:6px}
+  .editing-tag.on{display:block}
+
+  /* ---------- 右邊 A4 預覽 / 列印區 ---------- */
+  .stage{flex:1;overflow:auto;padding:28px;display:flex;justify-content:center;align-items:flex-start}
+  .stage-inner{zoom:.82}
+
+  .page{
+    width:210mm;min-height:297mm;background:#fff;color:#111;
+    padding:15mm 15mm 12mm;position:relative;
+    box-shadow:0 6px 30px rgba(0,0,0,.18);
+    display:flex;flex-direction:column;
+  }
+
+  /* 頂部：公司 | 標題 | 客戶資料 */
+  .top{display:grid;grid-template-columns:1fr auto 1fr;align-items:flex-start;gap:12px}
+  .brand{max-width:62mm}
+  .brand .logo-wrap{display:flex;align-items:center;gap:8px}
+  .brand .logo-wrap img{height:34px;width:auto}
+  .brand .co-zh{font-size:22px;font-weight:800;letter-spacing:1px;line-height:1.1}
+  .brand .co-en{font-size:12px;font-weight:700;letter-spacing:1px;margin-top:2px}
+  .brand.big .co-zh{font-size:30px}
+  .doctitle{font-size:34px;font-weight:800;letter-spacing:-.5px;padding-top:4px;text-align:center}
+  .doctitle small{display:block;font-size:12px;font-weight:700;letter-spacing:3px;color:#333;margin-top:-2px}
+  .meta{font-size:11.5px;text-align:right;line-height:1.9}
+  .meta b{font-weight:700}
+  .attn{font-size:10.5px;font-weight:700;letter-spacing:.5px;margin-top:10px}
+
+  .hr{border:0;border-top:1.5px solid #111;margin:12px 0 0}
+
+  /* 表格 */
+  table.items-t{width:100%;border-collapse:collapse;margin-top:14px;font-size:12.5px}
+  table.items-t th{font-size:11px;font-weight:700;text-align:left;padding:0 4px 12px}
+  table.items-t th.num,table.items-t td.num{text-align:right}
+  table.items-t td{padding:6px 4px;vertical-align:top;line-height:1.5}
+  table.items-t td .en{font-size:10.5px;color:#333}
+
+  .body-space{flex:1;min-height:40mm}
+
+  /* 收據語 */
+  .receipt-note{margin-top:18px;font-size:12.5px;line-height:1.9;border:1px solid #111;padding:10px 12px}
+  .receipt-note .en{font-size:11px;color:#333}
+  .receipt-pay{margin-top:8px;font-size:11.5px}
+
+  .total{display:flex;justify-content:flex-end;align-items:baseline;gap:24px;margin-top:8px;font-weight:700}
+  .total .lbl{font-size:13px}
+  .total .val{font-size:16px}
+  .total-rule{border:0;border-top:1px solid #111;margin-top:6px}
+
+  .sign{margin-top:26px;text-align:right}
+  .sign .line{display:inline-block;min-width:60mm;border-top:1.4px solid #111;padding-top:4px}
+  .sign .prefix{font-size:12px;font-weight:700;margin-right:8px}
+  .sign .name{font-size:12.5px;font-weight:700}
+
+  .foot{margin-top:auto;padding-top:18px}
+  .foot .frule{border:0;border-top:1px solid #111;margin-bottom:8px}
+  .foot h4{font-size:11px;font-weight:700;margin:10px 0 4px}
+  .foot p{font-size:10.5px;margin:2px 0;line-height:1.6}
+  .foot .grid{display:grid;grid-template-columns:1.3fr 1fr;gap:4px 20px}
+
+  @media print{
+    body{display:block;background:#fff}
+    .controls,.modal-bg{display:none !important}
+    .stage{padding:0;overflow:visible}
+    .stage-inner{zoom:1}
+    .page{box-shadow:none;width:auto;min-height:auto;margin:0}
+    @page{size:A4;margin:0}
+  }
+</style>
+</head>
+<body>
+
+<!-- ================= 控制面板 ================= -->
+<div class="controls">
+  <h1>發票 / 收據產生器</h1>
+  <p class="sub">揀公司同單據類型 → 填資料 → 撳「列印 / 存 PDF」。公司資料同編號會用瀏覽器記住。</p>
+
+  <div class="fieldset">
+    <div class="seg" id="segCompany"></div>
+    <label class="lb">單據類型</label>
+    <div class="seg" id="segDoc">
+      <button data-doc="invoice" class="on">發票 Invoice</button>
+      <button data-doc="receipt">收據 Receipt</button>
+    </div>
+    <label class="lb">版式</label>
+    <div class="seg" id="segLayout">
+      <button data-layout="itemized" class="on">表格版（描述/數量/單價）</button>
+      <button data-layout="simple">簡易版（日期/金額）</button>
+    </div>
+  </div>
+
+  <div class="fieldset">
+    <label class="lb">客戶名稱 CUSTOMER</label>
+    <input type="text" id="customer" placeholder="例：陳嘉業 / New Yaohan">
+    <label class="lb">ATTN（收件部門，可留空）</label>
+    <input type="text" id="attn" placeholder="例：ACCOUNT DEPARTMENT">
+    <div class="row2">
+      <div>
+        <label class="lb">編號 <button class="linkbtn" id="resetSeq" title="重設此公司此月流水號">重設</button></label>
+        <input type="text" id="number">
+      </div>
+      <div>
+        <label class="lb">日期</label>
+        <input type="date" id="date">
+      </div>
+    </div>
+    <p class="hint" id="numHint"></p>
+  </div>
+
+  <div class="fieldset" id="itemsBox">
+    <legend>項目</legend>
+    <div class="items" id="items"></div>
+    <button class="addbtn" id="addItem">＋ 加一行</button>
+  </div>
+
+  <div class="fieldset" id="receiptBox" style="display:none">
+    <legend>收據資料</legend>
+    <label class="lb">收款方式</label>
+    <select id="payMethod">
+      <option value="現金 Cash">現金 Cash</option>
+      <option value="銀行轉賬 Bank Transfer">銀行轉賬 Bank Transfer</option>
+      <option value="支票 Cheque">支票 Cheque</option>
+    </select>
+    <label class="lb">收款日期（留空 = 同單據日期）</label>
+    <input type="date" id="payDate">
+  </div>
+
+  <div class="actions">
+    <div class="editing-tag" id="editingTag">✎ 正在改緊一張歷史單，儲存會覆蓋原單</div>
+    <button class="btn print" id="printBtn">🖨  列印 / 存 PDF</button>
+    <div class="row2" style="margin-top:8px">
+      <button class="btn ghost" id="saveBtn" style="margin-top:0">💾 存到歷史</button>
+      <button class="btn ghost" id="histBtn" style="margin-top:0">📋 歷史單據</button>
+    </div>
+    <button class="btn ghost" id="nextBtn">＋ 新一張（自動存返舊嗰張）</button>
+    <button class="btn ghost" id="settingsBtn">⚙︎ 公司設定</button>
+  </div>
+</div>
+
+<!-- ================= A4 預覽 ================= -->
+<div class="stage">
+  <div class="stage-inner">
+    <div class="page" id="page"></div>
+  </div>
+</div>
+
+<!-- ================= 歷史單據 modal ================= -->
+<div class="modal-bg" id="histModal">
+  <div class="modal wide">
+    <h2>歷史單據</h2>
+    <div class="hist-tools">
+      <select id="histFilterCo"><option value="">全部公司</option></select>
+      <select id="histFilterDoc">
+        <option value="">發票 + 收據</option>
+        <option value="invoice">只發票</option>
+        <option value="receipt">只收據</option>
+      </select>
+    </div>
+    <div id="histList"></div>
+    <button class="btn ghost" id="closeHist">關閉</button>
+  </div>
+</div>
+
+<!-- ================= 公司設定 modal ================= -->
+<div class="modal-bg" id="modal">
+  <div class="modal">
+    <h2>公司設定</h2>
+    <div id="coEditors"></div>
+    <button class="btn print" id="saveCo">儲存</button>
+    <button class="btn ghost" id="closeCo">取消</button>
+  </div>
+</div>
+
+<script>
+"use strict";
+
+/* ---------------- 預設兩間公司 ---------------- */
+const DEFAULT_LOGO_BOLT =
+  'data:image/svg+xml;utf8,' + encodeURIComponent(
+  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">' +
+  '<polygon points="18,10 62,10 82,30 38,30" fill="#111"/>' +
+  '<polygon points="18,40 62,40 82,60 38,60" fill="#111"/>' +
+  '<polygon points="18,70 62,70 82,90 38,90" fill="#111"/>' +
+  '<rect x="30" y="10" width="14" height="80" fill="#111"/>' +
+  '</svg>');
+
+const DEFAULT_COMPANIES = {
+  bolt:{
+    id:'bolt', tab:'博特 BOLT',
+    nameZh:'博特有限公司', nameEn:'BOLT LIMITADA',
+    logo:DEFAULT_LOGO_BOLT, bigName:false,
+    bank:'中國銀行澳門元帳戶 - 183800375138706 (博特有限公司)',
+    cheque:'博特有限公司',
+    addrZh:'澳門荷蘭固容昌大廈地下 AB',
+    addrEn:'RUA DE ABREU NUNES, EDF. IONG CHEONG, RC-AB, MACAU',
+    mail:'MORIA@BOLMACAU.COM', tel:'+853 66198448',
+    numFmt:'bolt', defLayout:'simple'
+  },
+  gen:{
+    id:'gen', tab:'艮 GEN',
+    nameZh:'艮有限公司', nameEn:'',
+    logo:'', bigName:true,
+    bank:'中國銀行澳門元帳戶 - 183-800-375-047-499',
+    cheque:'艮有限公司',
+    addrZh:'澳門荷蘭固容昌大廈地下 AB',
+    addrEn:'RUA DE ABREU NUNES, EDF. IONG CHEONG, RC-AB, MACAU',
+    mail:'MORIA@BOLMACAU.COM', tel:'+853 66888517',
+    numFmt:'gen', defLayout:'itemized'
+  }
+};
+
+/* ---------------- 狀態 ---------------- */
+const LS_CO = 'bolinv:companies';
+function loadCompanies(){
+  try{
+    const saved = JSON.parse(localStorage.getItem(LS_CO));
+    if(saved && saved.bolt && saved.gen) return saved;
+  }catch(e){}
+  return JSON.parse(JSON.stringify(DEFAULT_COMPANIES));
+}
+let companies = loadCompanies();
+
+const state = {
+  editId:null,
+  companyId:'bolt',
+  doc:'invoice',
+  layout:'simple',
+  customer:'',
+  attn:'',
+  number:'',
+  date:todayISO(),
+  items:[],
+  payMethod:'現金 Cash',
+  payDate:''
+};
+
+function todayISO(){
+  const d=new Date();
+  return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());
+}
+function pad(n){return String(n).padStart(2,'0')}
+
+/* ---------------- 流水號 ---------------- */
+function seqKey(cid,doc,ym){return 'bolinv:seq:'+cid+':'+doc+':'+ym}
+function ymFromDate(iso){const[y,m]=iso.split('-');return y+m}
+function currentSeq(){
+  const ym=ymFromDate(state.date);
+  const v=parseInt(localStorage.getItem(seqKey(state.companyId,state.doc,ym))||'1',10);
+  return isNaN(v)?1:v;
+}
+function bumpSeq(){
+  const ym=ymFromDate(state.date);
+  localStorage.setItem(seqKey(state.companyId,state.doc,ym), String(currentSeq()+1));
+}
+function resetSeq(){
+  const ym=ymFromDate(state.date);
+  localStorage.setItem(seqKey(state.companyId,state.doc,ym),'1');
+}
+function formatNumber(){
+  const co=companies[state.companyId];
+  const [y,m]=state.date.split('-');
+  const seq=currentSeq();
+  if(co.numFmt==='bolt'){
+    return pad(seq)+'/'+y+'-'+m;          // 例 01/2026-04
+  }else{
+    return y.slice(2)+m+pad(seq);         // 例 260602  (yymm + 序)
+  }
+}
+
+/* ---------------- 金額格式 ---------------- */
+function money(n){
+  n=Number(n)||0;
+  return '$'+n.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
+}
+function total(){
+  if(state.layout==='simple')
+    return state.items.reduce((s,it)=>s+(Number(it.amount)||0),0);
+  return state.items.reduce((s,it)=>s+(Number(it.qty)||0)*(Number(it.price)||0),0);
+}
+function fmtDate(iso){
+  if(!iso) return '';
+  const[y,m,d]=iso.split('-');return d+'/'+m+'/'+y;
+}
+
+/* ---------------- 渲染預覽 ---------------- */
+function esc(s){return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}
+
+function render(){
+  const co=companies[state.companyId];
+  const isReceipt = state.doc==='receipt';
+  const numLabel = isReceipt ? '收據編號 (RECEIPT NO)' : '發票編號 (INVOICE NO)';
+
+  // 品牌區
+  let brand;
+  if(co.logo){
+    brand = '<div class="logo-wrap"><img src="'+co.logo+'"><span class="co-zh">'+esc(co.nameZh)+'</span></div>'
+          + (co.nameEn?'<div class="co-en">'+esc(co.nameEn)+'</div>':'');
+  }else{
+    brand = '<div class="co-zh">'+esc(co.nameZh)+'</div>'
+          + (co.nameEn?'<div class="co-en">'+esc(co.nameEn)+'</div>':'');
+  }
+
+  // 表格
+  let tableHTML;
+  if(state.layout==='simple'){
+    let rows = state.items.map(it=>
+      '<tr><td>'+esc(it.label||'')+'</td>'
+      +'<td class="num">'+money(it.amount)+'</td></tr>').join('');
+    tableHTML =
+      '<table class="items-t"><thead><tr>'
+      +'<th>invoice date</th><th class="num">AMOUNT(MOP)</th>'
+      +'</tr></thead><tbody>'+rows+'</tbody></table>';
+  }else{
+    let rows = state.items.map(it=>{
+      const amt=(Number(it.qty)||0)*(Number(it.price)||0);
+      return '<tr><td>'+esc(it.desc||'').replace(/\n/g,'<br>')+'</td>'
+        +'<td class="num">'+(it.qty||'')+'</td>'
+        +'<td class="num">'+money(it.price)+'</td>'
+        +'<td class="num">'+money(amt)+'</td></tr>';
+    }).join('');
+    tableHTML =
+      '<table class="items-t"><thead><tr>'
+      +'<th>項目描述 (DESCRIPTION)</th>'
+      +'<th class="num">數量 (QTY)</th>'
+      +'<th class="num">單價 (PRICE)</th>'
+      +'<th class="num">金額 (AMOUNT)</th>'
+      +'</tr></thead><tbody>'+rows+'</tbody></table>';
+  }
+
+  // 收據語
+  let receiptHTML='';
+  if(isReceipt){
+    const pd = state.payDate || state.date;
+    receiptHTML =
+      '<div class="receipt-note">'
+      +'茲收到 <b>'+esc(state.customer||'____________')+'</b> 交來澳門幣 <b>MOP '+money(total())+'</b>，上述款項已如數收妥。'
+      +'<div class="en">Received from '+esc(state.customer||'____________')+' the sum of MOP '+money(total())+' with thanks.</div>'
+      +'<div class="receipt-pay">收款方式 (PAYMENT): <b>'+esc(state.payMethod)+'</b>　　收款日期 (DATE): <b>'+fmtDate(pd)+'</b></div>'
+      +'</div>';
+  }
+
+  const title = isReceipt ? 'receipt' : 'invoice';
+  const titleSmall = isReceipt ? '<small>收據</small>' : '';
+
+  document.getElementById('page').innerHTML =
+    '<div class="top">'
+    +  '<div class="brand'+(co.bigName?' big':'')+'">'+brand
+    +     (state.attn?'<div class="attn">ATTN : '+esc(state.attn)+'</div>':'')
+    +  '</div>'
+    +  '<div class="doctitle">'+title+titleSmall+'</div>'
+    +  '<div class="meta">'
+    +     '<div>客戶名稱 (CUSTOMER): <b>'+esc(state.customer)+'</b></div>'
+    +     '<div>'+numLabel+': <b>'+esc(state.number)+'</b></div>'
+    +     '<div>日期 (DATE): <b>'+fmtDate(state.date)+'</b></div>'
+    +  '</div>'
+    +'</div>'
+    +'<hr class="hr">'
+    + tableHTML
+    +'<div class="body-space"></div>'
+    + receiptHTML
+    +'<div class="total"><span class="lbl">TOTAL</span><span class="val">MOP '+money(total())+'</span></div>'
+    +'<hr class="total-rule">'
+    +'<div class="sign"><span class="prefix">SIGN</span><span class="line"><span class="name">'
+    +   esc(co.nameZh)+(co.nameEn?' '+esc(co.nameEn):'')+'</span></span></div>'
+    +'<div class="foot">'
+    +  '<hr class="frule">'
+    +  '<h4>付款資訊</h4>'
+    +  '<p>轉賬: '+esc(co.bank)+'</p>'
+    +  '<p>支票: 支票抬頭 - '+esc(co.cheque)+'</p>'
+    +  '<h4>聯絡資訊</h4>'
+    +  '<div class="grid">'
+    +     '<p>地址: '+esc(co.addrZh)+'</p><p>MAIL: '+esc(co.mail)+'</p>'
+    +     '<p>ADDRESS: '+esc(co.addrEn)+'</p><p>TEL: '+esc(co.tel)+'</p>'
+    +  '</div>'
+    +'</div>';
+}
+
+/* ---------------- 控制面板事件 ---------------- */
+function buildCompanyTabs(){
+  const seg=document.getElementById('segCompany');
+  seg.innerHTML='';
+  Object.values(companies).forEach(co=>{
+    const b=document.createElement('button');
+    b.textContent=co.tab; b.dataset.co=co.id;
+    if(co.id===state.companyId) b.classList.add('on');
+    b.onclick=()=>{
+      state.companyId=co.id;
+      state.layout=companies[co.id].defLayout;
+      state.editId=null; updateEditingTag();
+      syncLayoutSeg(); ensureItems();
+      refreshNumber(); syncTabs(); render();
+    };
+    seg.appendChild(b);
+  });
+  // 公司 label 上方加個標題
+  const lbl=document.createElement('label');
+}
+function syncTabs(){
+  document.querySelectorAll('#segCompany button').forEach(b=>
+    b.classList.toggle('on', b.dataset.co===state.companyId));
+}
+function syncLayoutSeg(){
+  document.querySelectorAll('#segLayout button').forEach(b=>
+    b.classList.toggle('on', b.dataset.layout===state.layout));
+  document.getElementById('itemsBox').style.display='block';
+}
+
+document.querySelectorAll('#segDoc button').forEach(b=>{
+  b.onclick=()=>{
+    state.doc=b.dataset.doc;
+    state.editId=null; updateEditingTag();
+    document.querySelectorAll('#segDoc button').forEach(x=>x.classList.toggle('on',x===b));
+    document.getElementById('receiptBox').style.display = state.doc==='receipt'?'block':'none';
+    refreshNumber(); render();
+  };
+});
+document.querySelectorAll('#segLayout button').forEach(b=>{
+  b.onclick=()=>{
+    state.layout=b.dataset.layout;
+    syncLayoutSeg(); ensureItems(); render();
+  };
+});
+
+document.getElementById('customer').oninput=e=>{state.customer=e.target.value;render();};
+document.getElementById('attn').oninput=e=>{state.attn=e.target.value;render();};
+document.getElementById('number').oninput=e=>{state.number=e.target.value;render();};
+document.getElementById('date').oninput=e=>{state.date=e.target.value;refreshNumber();render();};
+document.getElementById('payMethod').onchange=e=>{state.payMethod=e.target.value;render();};
+document.getElementById('payDate').oninput=e=>{state.payDate=e.target.value;render();};
+
+document.getElementById('resetSeq').onclick=()=>{resetSeq();refreshNumber();render();};
+
+function refreshNumber(){
+  state.number=formatNumber();
+  document.getElementById('number').value=state.number;
+  const co=companies[state.companyId];
+  const example = co.numFmt==='bolt' ? '序號/年-月 (例 01/2026-04)' : '年年月月序 (例 260602)';
+  document.getElementById('numHint').textContent='自動流水號格式：'+example+'。撳「下一號」會累進；可手動改。';
+}
+
+/* ---------------- 項目編輯 ---------------- */
+function ensureItems(){
+  if(state.items.length===0) addItemRow();
+  else migrateItems();
+  renderItemEditors();
+}
+function migrateItems(){
+  // 確保欄位符合當前版式
+  state.items=state.items.map(it=>{
+    if(state.layout==='simple') return {label:it.label|| (it.desc||''), amount:it.amount||((Number(it.qty)||0)*(Number(it.price)||0))||''};
+    return {desc:it.desc|| (it.label||''), qty:it.qty||1, price:it.price|| (it.amount||'')};
+  });
+}
+function addItemRow(){
+  if(state.layout==='simple') state.items.push({label:fmtDate(state.date),amount:''});
+  else state.items.push({desc:'',qty:1,price:''});
+}
+function renderItemEditors(){
+  const box=document.getElementById('items');
+  box.innerHTML='';
+  state.items.forEach((it,i)=>{
+    const d=document.createElement('div');
+    d.className='item';
+    if(state.layout==='simple'){
+      d.innerHTML=
+        '<button class="del">刪</button>'
+        +'<label class="lb">日期 / 說明</label><input type="text" data-f="label" value="'+attr(it.label)+'">'
+        +'<label class="lb">金額 (MOP)</label><input type="number" step="0.01" data-f="amount" value="'+attr(it.amount)+'">';
+    }else{
+      d.innerHTML=
+        '<button class="del">刪</button>'
+        +'<label class="lb">項目描述</label><textarea data-f="desc">'+esc(it.desc)+'</textarea>'
+        +'<div class="row2">'
+        +'<div><label class="lb">數量</label><input type="number" step="1" data-f="qty" value="'+attr(it.qty)+'"></div>'
+        +'<div><label class="lb">單價 (MOP)</label><input type="number" step="0.01" data-f="price" value="'+attr(it.price)+'"></div>'
+        +'</div>'
+        +'<div class="hint">小計 (自動): <span class="sub-amt">'+money((Number(it.qty)||0)*(Number(it.price)||0))+'</span></div>';
+    }
+    d.querySelectorAll('[data-f]').forEach(inp=>{
+      inp.oninput=()=>{
+        state.items[i][inp.dataset.f]=inp.value;
+        if(state.layout==='itemized'){
+          const sub=d.querySelector('.sub-amt');
+          if(sub) sub.textContent=money((Number(state.items[i].qty)||0)*(Number(state.items[i].price)||0));
+        }
+        render();
+      };
+    });
+    d.querySelector('.del').onclick=()=>{
+      state.items.splice(i,1);
+      if(state.items.length===0) addItemRow();
+      renderItemEditors(); render();
+    };
+    box.appendChild(d);
+  });
+}
+function attr(s){return String(s==null?'':s).replace(/"/g,'&quot;')}
+document.getElementById('addItem').onclick=()=>{addItemRow();renderItemEditors();render();};
+
+/* ---------------- 歷史單據 ---------------- */
+const LS_HIST='bolinv:history';
+function loadHist(){try{return JSON.parse(localStorage.getItem(LS_HIST))||[]}catch(e){return[]}}
+function saveHistArr(a){localStorage.setItem(LS_HIST,JSON.stringify(a))}
+function hasContent(){
+  if((state.customer||'').trim()) return true;
+  return state.items.some(it=> state.layout==='simple'
+    ? (Number(it.amount)||0)>0 : (Number(it.price)||0)>0 );
+}
+function snapshot(){
+  return {
+    companyId:state.companyId, doc:state.doc, layout:state.layout,
+    customer:state.customer, attn:state.attn, number:state.number, date:state.date,
+    items:JSON.parse(JSON.stringify(state.items)),
+    payMethod:state.payMethod, payDate:state.payDate,
+    total:total(), ts:Date.now()
+  };
+}
+function saveToHistory(silent){
+  const arr=loadHist();
+  const rec=snapshot();
+  if(state.editId){
+    const i=arr.findIndex(r=>r.id===state.editId);
+    rec.id=state.editId;
+    if(i>=0) arr[i]=rec; else arr.push(rec);
+  }else{
+    rec.id='r'+Date.now()+'-'+Math.floor(Math.random()*1e4);
+    arr.push(rec);
+    state.editId=rec.id;
+    updateEditingTag();
+  }
+  saveHistArr(arr);
+  if(!silent) flash('已存到歷史');
+}
+function deleteHist(id){ saveHistArr(loadHist().filter(r=>r.id!==id)); }
+function applyRecord(rec){
+  state.companyId=rec.companyId; state.doc=rec.doc; state.layout=rec.layout;
+  state.customer=rec.customer||''; state.attn=rec.attn||'';
+  state.number=rec.number||''; state.date=rec.date;
+  state.items=JSON.parse(JSON.stringify(rec.items||[]));
+  state.payMethod=rec.payMethod||'現金 Cash'; state.payDate=rec.payDate||'';
+  // 同步 UI
+  document.getElementById('customer').value=state.customer;
+  document.getElementById('attn').value=state.attn;
+  document.getElementById('number').value=state.number;
+  document.getElementById('date').value=state.date;
+  document.getElementById('payMethod').value=state.payMethod;
+  document.getElementById('payDate').value=state.payDate;
+  document.querySelectorAll('#segDoc button').forEach(b=>b.classList.toggle('on',b.dataset.doc===state.doc));
+  document.getElementById('receiptBox').style.display = state.doc==='receipt'?'block':'none';
+  syncTabs(); syncLayoutSeg(); renderItemEditors();
+}
+function loadRecord(id){
+  const rec=loadHist().find(r=>r.id===id); if(!rec) return;
+  applyRecord(rec);
+  state.editId=rec.id; updateEditingTag();
+  render(); closeHist();
+  document.querySelector('.stage').scrollTop=0;
+  flash('已載入 '+rec.number+'，可直接改再印');
+}
+function dupRecord(id){
+  const rec=loadHist().find(r=>r.id===id); if(!rec) return;
+  applyRecord(rec);
+  state.editId=null; updateEditingTag();
+  refreshNumber();              // 新編號
+  render(); closeHist();
+  document.querySelector('.stage').scrollTop=0;
+  flash('已複製做新單（新編號）');
+}
+function openHist(){
+  const co=document.getElementById('histFilterCo');
+  if(co.options.length<=1){
+    Object.values(companies).forEach(c=>{
+      const o=document.createElement('option');o.value=c.id;o.textContent=c.tab;co.appendChild(o);
+    });
+  }
+  renderHistList();
+  document.getElementById('histModal').classList.add('open');
+}
+function closeHist(){document.getElementById('histModal').classList.remove('open')}
+function renderHistList(){
+  const fc=document.getElementById('histFilterCo').value;
+  const fd=document.getElementById('histFilterDoc').value;
+  let arr=loadHist().slice().sort((a,b)=>b.ts-a.ts);
+  if(fc) arr=arr.filter(r=>r.companyId===fc);
+  if(fd) arr=arr.filter(r=>r.doc===fd);
+  const box=document.getElementById('histList');
+  if(arr.length===0){
+    box.innerHTML='<p class="hint">未有符合嘅歷史單據。列印或撳「存到歷史」就會記錄喺度。</p>';
+    return;
+  }
+  box.innerHTML=arr.map(r=>{
+    const c=companies[r.companyId]||{tab:'?'};
+    const dt=r.doc==='receipt'?'收據':'發票';
+    return '<div class="hist-row">'
+     +'<div class="hist-main">'
+     +'<div class="hist-num">'+esc(r.number)+'<span class="hist-badge">'+dt+'</span></div>'
+     +'<div class="hist-sub">'+esc(c.tab)+' · '+esc(r.customer||'—')+' · '+fmtDate(r.date)+' · MOP '+money(r.total)+'</div>'
+     +'</div>'
+     +'<div class="hist-btns">'
+     +'<button class="hbtn load" data-id="'+r.id+'">改</button>'
+     +'<button class="hbtn dup" data-id="'+r.id+'">複製</button>'
+     +'<button class="hbtn del" data-id="'+r.id+'">刪</button>'
+     +'</div></div>';
+  }).join('');
+  box.querySelectorAll('.hbtn.load').forEach(b=>b.onclick=()=>loadRecord(b.dataset.id));
+  box.querySelectorAll('.hbtn.dup').forEach(b=>b.onclick=()=>dupRecord(b.dataset.id));
+  box.querySelectorAll('.hbtn.del').forEach(b=>b.onclick=()=>{
+    if(confirm('刪除呢張歷史單？')){ deleteHist(b.dataset.id); renderHistList(); }
+  });
+}
+function updateEditingTag(){
+  document.getElementById('editingTag').classList.toggle('on', !!state.editId);
+}
+function flash(msg){
+  let t=document.getElementById('toast');
+  if(!t){t=document.createElement('div');t.id='toast';document.body.appendChild(t);}
+  t.textContent=msg; t.classList.add('show');
+  clearTimeout(flash._t); flash._t=setTimeout(()=>t.classList.remove('show'),1800);
+}
+document.getElementById('histBtn').onclick=openHist;
+document.getElementById('closeHist').onclick=closeHist;
+document.getElementById('saveBtn').onclick=()=>saveToHistory(false);
+document.getElementById('histFilterCo').onchange=renderHistList;
+document.getElementById('histFilterDoc').onchange=renderHistList;
+
+/* ---------------- 動作按鈕 ---------------- */
+document.getElementById('printBtn').onclick=()=>{ if(hasContent()) saveToHistory(true); window.print(); };
+
+document.getElementById('nextBtn').onclick=()=>{
+  if(hasContent()) saveToHistory(true);   // 存返舊嗰張
+  bumpSeq();
+  state.editId=null; updateEditingTag();
+  state.customer=''; state.attn='';
+  state.items=[]; addItemRow();
+  document.getElementById('customer').value='';
+  document.getElementById('attn').value='';
+  renderItemEditors();
+  refreshNumber(); render();
+  document.querySelector('.stage').scrollTop=0;
+  flash('已開新一張');
+};
+
+/* ---------------- 公司設定 modal ---------------- */
+const FIELDS=[
+  ['nameZh','中文公司名'],['nameEn','英文/葡文名（可空）'],
+  ['bank','轉賬資料'],['cheque','支票抬頭'],
+  ['addrZh','地址（中）'],['addrEn','地址（ADDRESS）'],
+  ['mail','MAIL'],['tel','TEL']
+];
+function openSettings(){
+  const wrap=document.getElementById('coEditors');
+  wrap.innerHTML='';
+  Object.values(companies).forEach(co=>{
+    const blk=document.createElement('div');
+    blk.className='co-block';
+    blk.innerHTML='<b>'+esc(co.tab)+'</b>';
+    FIELDS.forEach(([k,lbl])=>{
+      blk.innerHTML+='<label class="lb">'+lbl+'</label><input type="text" data-co="'+co.id+'" data-k="'+k+'" value="'+attr(co[k])+'">';
+    });
+    blk.innerHTML+='<label class="lb">Logo（PNG/JPG，可空）</label>'
+      +'<input type="file" accept="image/*" data-co="'+co.id+'" data-logo="1">'
+      +(co.logo?'<img class="logo-prev" src="'+co.logo+'">':'');
+    wrap.appendChild(blk);
+  });
+  wrap.querySelectorAll('input[type=file]').forEach(f=>{
+    f.onchange=e=>{
+      const file=e.target.files[0]; if(!file) return;
+      const r=new FileReader();
+      r.onload=()=>{ companies[f.dataset.co].logo=r.result; openSettings(); };
+      r.readAsDataURL(file);
+    };
+  });
+  document.getElementById('modal').classList.add('open');
+}
+document.getElementById('settingsBtn').onclick=openSettings;
+document.getElementById('closeCo').onclick=()=>{companies=loadCompanies();document.getElementById('modal').classList.remove('open');};
+document.getElementById('saveCo').onclick=()=>{
+  document.querySelectorAll('#coEditors input[type=text]').forEach(inp=>{
+    companies[inp.dataset.co][inp.dataset.k]=inp.value;
+  });
+  localStorage.setItem(LS_CO, JSON.stringify(companies));
+  document.getElementById('modal').classList.remove('open');
+  buildCompanyTabs(); refreshNumber(); render();
+};
+
+/* ---------------- 初始化 ---------------- */
+function init(){
+  state.layout=companies[state.companyId].defLayout;
+  document.getElementById('date').value=state.date;
+  buildCompanyTabs();
+  syncLayoutSeg();
+  ensureItems();
+  refreshNumber();
+  render();
+}
+init();
+</script>
+</body>
+</html>
