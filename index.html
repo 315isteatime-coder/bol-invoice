@@ -117,8 +117,8 @@
   table.items-t td{padding:6px 4px;vertical-align:top;line-height:1.5}
   table.items-t td .en{font-size:10.5px;color:#333}
 
-  .body-space{min-height:40mm}
-  .sign-space{flex:1;min-height:24mm}
+  .body-space{min-height:0}
+  .sign-space{flex:1;min-height:16mm}
 
   /* 收據語 */
   .receipt-note{margin-top:18px;font-size:12.5px;line-height:1.9;border:1px solid #111;padding:10px 12px}
@@ -130,7 +130,7 @@
   .total .val{font-size:16px}
   .total-rule{border:0;border-top:1px solid #111;margin-top:6px}
 
-  .sign{position:relative;margin-top:22px;text-align:right;min-height:8mm}
+  .sign{position:relative;margin-top:0;text-align:right;min-height:8mm}
   .sign .line{display:inline-block;min-width:60mm;border-top:1.4px solid #111;padding-top:4px;position:relative;z-index:1}
   .sign .prefix{font-size:12px;font-weight:700;margin-right:8px}
   .sign .name{font-size:12.5px;font-weight:700}
@@ -217,6 +217,15 @@
       <label style="display:flex;align-items:center;gap:8px;font-size:13px;margin-top:8px"><input type="checkbox" id="showSign" checked> 顯示簽名</label>
     </div>
     <p class="hint">上載後喺右邊預覽度：<b>拖動</b>張圖放位、拖<b>右下角黑點</b>拉大細。位置同大細會自動記住。建議用去背/透明底 PNG，白底都得（會自動透走）。</p>
+  </div>
+
+  <div class="fieldset" id="layoutBox">
+    <legend>版面上下位（每間公司記住）</legend>
+    <label class="lb">金額 TOTAL　上 ←→ 下</label>
+    <input type="range" id="totalGap" min="20" max="560" step="2" style="width:100%">
+    <label class="lb">簽名欄 SIGN　上 ←→ 下</label>
+    <input type="range" id="signGap" min="0" max="360" step="2" style="width:100%">
+    <p class="hint">拉滑桿分別調「金額」同「簽名欄」嘅高低。蓋章／簽名圖仍然喺右邊預覽度自己拖放位、拉大細。</p>
   </div>
 
   <div class="fieldset" id="receiptBox" style="display:none">
@@ -466,10 +475,11 @@ function render(){
     +'</div>'
     +'<hr class="hr">'
     + tableHTML
-    +'<div class="body-space"></div>'
+    +'<div class="body-space" style="height:'+getTG(co)+'px"></div>'
     + receiptHTML
     +'<div class="total"><span class="lbl">TOTAL</span><span class="val">MOP '+money(total())+'</span></div>'
     +'<hr class="total-rule">'
+    +'<div class="sign-gap" style="height:'+getSG(co)+'px"></div>'
     +'<div class="sign"><span class="prefix">SIGN</span><span class="line"><span class="name">'
     +   esc(co.nameZh)+(co.nameEn?' '+esc(co.nameEn):'')+'</span></span></div>'
     +'<div class="sign-space"></div>'
@@ -486,6 +496,7 @@ function render(){
     +'</div>';
 
   mountMarks();
+  syncLayoutSliders();
 }
 
 /* ---------------- 控制面板事件 ---------------- */
@@ -546,6 +557,16 @@ document.getElementById('showSign').onchange=e=>{state.showSign=e.target.checked
 /* ---------------- 可拖曳蓋章 / 簽名 ---------------- */
 const PAGE_W = 210/25.4*96;   // A4 闊度（CSS px, 96dpi）= 793.7
 function saveCompaniesSilent(){ localStorage.setItem(LS_CO, JSON.stringify(companies)); }
+function getTG(co){ return typeof co.totalGap==='number'?co.totalGap:151; }   // 金額上方空位（px）
+function getSG(co){ return typeof co.signGap==='number'?co.signGap:22; }      // 簽名欄上方空位（px）
+function syncLayoutSliders(){
+  const co=companies[state.companyId];
+  const tg=document.getElementById('totalGap'), sg=document.getElementById('signGap');
+  if(tg) tg.value=getTG(co);
+  if(sg) sg.value=getSG(co);
+}
+document.getElementById('totalGap').oninput=e=>{ companies[state.companyId].totalGap=Number(e.target.value); saveCompaniesSilent(); render(); };
+document.getElementById('signGap').oninput=e=>{ companies[state.companyId].signGap=Number(e.target.value); saveCompaniesSilent(); render(); };
 function defPos(type){ return type==='stamp' ? {x:560,y:398,w:150} : {x:520,y:375,w:190}; }
 function getPos(cid,type){
   const co=companies[cid], k=type+'Pos';
