@@ -91,6 +91,7 @@
     padding:15mm 15mm 12mm;position:relative;
     box-shadow:0 6px 30px rgba(0,0,0,.18);
     display:flex;flex-direction:column;
+    -webkit-print-color-adjust:exact;print-color-adjust:exact;
   }
 
   /* 頂部：公司 | 標題 | 客戶資料 */
@@ -128,10 +129,12 @@
   .total .val{font-size:16px}
   .total-rule{border:0;border-top:1px solid #111;margin-top:6px}
 
-  .sign{margin-top:26px;text-align:right}
-  .sign .line{display:inline-block;min-width:60mm;border-top:1.4px solid #111;padding-top:4px}
+  .sign{position:relative;margin-top:30px;text-align:right;min-height:34mm;padding-bottom:6mm}
+  .sign .line{display:inline-block;min-width:60mm;border-top:1.4px solid #111;padding-top:4px;position:relative;z-index:1}
   .sign .prefix{font-size:12px;font-weight:700;margin-right:8px}
   .sign .name{font-size:12.5px;font-weight:700}
+  .sign .sig-img{position:absolute;right:30mm;bottom:9mm;max-width:70mm;mix-blend-mode:multiply;pointer-events:none;z-index:2}
+  .sign .stamp-img{position:absolute;right:6mm;bottom:0;max-width:52mm;opacity:.92;mix-blend-mode:multiply;pointer-events:none;transform:rotate(-7deg);z-index:3}
 
   .foot{margin-top:auto;padding-top:18px}
   .foot .frule{border:0;border-top:1px solid #111;margin-bottom:8px}
@@ -192,6 +195,13 @@
     <legend>項目</legend>
     <div class="items" id="items"></div>
     <button class="addbtn" id="addItem">＋ 加一行</button>
+  </div>
+
+  <div class="fieldset" id="markBox">
+    <legend>蓋章 / 簽名</legend>
+    <label style="display:flex;align-items:center;gap:8px;font-size:13px"><input type="checkbox" id="showStamp" checked> 顯示公司蓋章</label>
+    <label style="display:flex;align-items:center;gap:8px;font-size:13px;margin-top:8px"><input type="checkbox" id="showSign" checked> 顯示簽名</label>
+    <p class="hint">未有圖？去下面「⚙︎ 公司設定」上載章同簽名圖（每間公司各自一套）。</p>
   </div>
 
   <div class="fieldset" id="receiptBox" style="display:none">
@@ -275,7 +285,8 @@ const DEFAULT_COMPANIES = {
     addrZh:'澳門荷蘭固容昌大廈地下 AB',
     addrEn:'RUA DE ABREU NUNES, EDF. IONG CHEONG, RC-AB, MACAU',
     mail:'MORIA@BOLMACAU.COM', tel:'+853 66198448',
-    numFmt:'bolt', defLayout:'simple'
+    numFmt:'bolt', defLayout:'simple',
+    stamp:'', sign:'', stampSize:150, signSize:170
   },
   gen:{
     id:'gen', tab:'艮 GEN',
@@ -286,7 +297,8 @@ const DEFAULT_COMPANIES = {
     addrZh:'澳門荷蘭固容昌大廈地下 AB',
     addrEn:'RUA DE ABREU NUNES, EDF. IONG CHEONG, RC-AB, MACAU',
     mail:'MORIA@BOLMACAU.COM', tel:'+853 66888517',
-    numFmt:'gen', defLayout:'itemized'
+    numFmt:'gen', defLayout:'itemized',
+    stamp:'', sign:'', stampSize:150, signSize:170
   }
 };
 
@@ -312,7 +324,9 @@ const state = {
   date:todayISO(),
   items:[],
   payMethod:'現金 Cash',
-  payDate:''
+  payDate:'',
+  showStamp:true,
+  showSign:true
 };
 
 function todayISO(){
@@ -441,7 +455,10 @@ function render(){
     + receiptHTML
     +'<div class="total"><span class="lbl">TOTAL</span><span class="val">MOP '+money(total())+'</span></div>'
     +'<hr class="total-rule">'
-    +'<div class="sign"><span class="prefix">SIGN</span><span class="line"><span class="name">'
+    +'<div class="sign">'
+    +   ((state.showSign && co.sign)?'<img class="sig-img" style="width:'+(co.signSize||170)+'px" src="'+co.sign+'">':'')
+    +   ((state.showStamp && co.stamp)?'<img class="stamp-img" style="width:'+(co.stampSize||150)+'px" src="'+co.stamp+'">':'')
+    +   '<span class="prefix">SIGN</span><span class="line"><span class="name">'
     +   esc(co.nameZh)+(co.nameEn?' '+esc(co.nameEn):'')+'</span></span></div>'
     +'<div class="foot">'
     +  '<hr class="frule">'
@@ -508,6 +525,8 @@ document.getElementById('number').oninput=e=>{state.number=e.target.value;render
 document.getElementById('date').oninput=e=>{state.date=e.target.value;refreshNumber();render();};
 document.getElementById('payMethod').onchange=e=>{state.payMethod=e.target.value;render();};
 document.getElementById('payDate').oninput=e=>{state.payDate=e.target.value;render();};
+document.getElementById('showStamp').onchange=e=>{state.showStamp=e.target.checked;render();};
+document.getElementById('showSign').onchange=e=>{state.showSign=e.target.checked;render();};
 
 document.getElementById('resetSeq').onclick=()=>{resetSeq();refreshNumber();render();};
 
@@ -593,6 +612,7 @@ function snapshot(){
     customer:state.customer, attn:state.attn, number:state.number, date:state.date,
     items:JSON.parse(JSON.stringify(state.items)),
     payMethod:state.payMethod, payDate:state.payDate,
+    showStamp:state.showStamp, showSign:state.showSign,
     total:total(), ts:Date.now()
   };
 }
@@ -619,7 +639,10 @@ function applyRecord(rec){
   state.number=rec.number||''; state.date=rec.date;
   state.items=JSON.parse(JSON.stringify(rec.items||[]));
   state.payMethod=rec.payMethod||'現金 Cash'; state.payDate=rec.payDate||'';
+  state.showStamp=rec.showStamp!==false; state.showSign=rec.showSign!==false;
   // 同步 UI
+  document.getElementById('showStamp').checked=state.showStamp;
+  document.getElementById('showSign').checked=state.showSign;
   document.getElementById('customer').value=state.customer;
   document.getElementById('attn').value=state.attn;
   document.getElementById('number').value=state.number;
@@ -739,17 +762,31 @@ function openSettings(){
       blk.innerHTML+='<label class="lb">'+lbl+'</label><input type="text" data-co="'+co.id+'" data-k="'+k+'" value="'+attr(co[k])+'">';
     });
     blk.innerHTML+='<label class="lb">Logo（PNG/JPG，可空）</label>'
-      +'<input type="file" accept="image/*" data-co="'+co.id+'" data-logo="1">'
-      +(co.logo?'<img class="logo-prev" src="'+co.logo+'">':'');
+      +'<input type="file" accept="image/*" data-co="'+co.id+'" data-img="logo">'
+      +(co.logo?'<img class="logo-prev" src="'+co.logo+'">':'')
+      +'<label class="lb">蓋章 章圖（PNG，白底會自動透走，可空）</label>'
+      +'<input type="file" accept="image/*" data-co="'+co.id+'" data-img="stamp">'
+      +(co.stamp?'<img class="logo-prev" src="'+co.stamp+'">':'')
+      + (co.stamp?'<button class="linkbtn" data-clear="stamp" data-co="'+co.id+'">移除章</button>':'')
+      +'<label class="lb">章大小 (px)</label><input type="number" data-co="'+co.id+'" data-k="stampSize" value="'+attr(co.stampSize||150)+'">'
+      +'<label class="lb">簽名 圖（PNG，白底會自動透走，可空）</label>'
+      +'<input type="file" accept="image/*" data-co="'+co.id+'" data-img="sign">'
+      +(co.sign?'<img class="logo-prev" src="'+co.sign+'">':'')
+      + (co.sign?'<button class="linkbtn" data-clear="sign" data-co="'+co.id+'">移除簽名</button>':'')
+      +'<label class="lb">簽名大小 (px)</label><input type="number" data-co="'+co.id+'" data-k="signSize" value="'+attr(co.signSize||170)+'">';
     wrap.appendChild(blk);
   });
   wrap.querySelectorAll('input[type=file]').forEach(f=>{
     f.onchange=e=>{
       const file=e.target.files[0]; if(!file) return;
+      const key=f.dataset.img||'logo';
       const r=new FileReader();
-      r.onload=()=>{ companies[f.dataset.co].logo=r.result; openSettings(); };
+      r.onload=()=>{ companies[f.dataset.co][key]=r.result; openSettings(); };
       r.readAsDataURL(file);
     };
+  });
+  wrap.querySelectorAll('[data-clear]').forEach(b=>{
+    b.onclick=()=>{ companies[b.dataset.co][b.dataset.clear]=''; openSettings(); };
   });
   document.getElementById('modal').classList.add('open');
 }
@@ -758,6 +795,9 @@ document.getElementById('closeCo').onclick=()=>{companies=loadCompanies();docume
 document.getElementById('saveCo').onclick=()=>{
   document.querySelectorAll('#coEditors input[type=text]').forEach(inp=>{
     companies[inp.dataset.co][inp.dataset.k]=inp.value;
+  });
+  document.querySelectorAll('#coEditors input[type=number]').forEach(inp=>{
+    companies[inp.dataset.co][inp.dataset.k]=Number(inp.value)||0;
   });
   localStorage.setItem(LS_CO, JSON.stringify(companies));
   document.getElementById('modal').classList.remove('open');
