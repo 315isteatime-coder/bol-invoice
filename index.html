@@ -117,7 +117,8 @@
   table.items-t td{padding:6px 4px;vertical-align:top;line-height:1.5}
   table.items-t td .en{font-size:10.5px;color:#333}
 
-  .body-space{flex:1;min-height:40mm}
+  .body-space{min-height:40mm}
+  .sign-space{flex:1;min-height:24mm}
 
   /* 收據語 */
   .receipt-note{margin-top:18px;font-size:12.5px;line-height:1.9;border:1px solid #111;padding:10px 12px}
@@ -129,7 +130,7 @@
   .total .val{font-size:16px}
   .total-rule{border:0;border-top:1px solid #111;margin-top:6px}
 
-  .sign{position:relative;margin-top:30px;text-align:right;min-height:34mm;padding-bottom:6mm}
+  .sign{position:relative;margin-top:22px;text-align:right;min-height:8mm}
   .sign .line{display:inline-block;min-width:60mm;border-top:1.4px solid #111;padding-top:4px;position:relative;z-index:1}
   .sign .prefix{font-size:12px;font-weight:700;margin-right:8px}
   .sign .name{font-size:12.5px;font-weight:700}
@@ -141,7 +142,7 @@
   .mark:hover{outline:1.5px dashed rgba(75,63,160,.7);outline-offset:2px}
   .mark:hover .rz{opacity:1}
 
-  .foot{margin-top:auto;padding-top:18px}
+  .foot{padding-top:14px}
   .foot .frule{border:0;border-top:1px solid #111;margin-bottom:8px}
   .foot h4{font-size:11px;font-weight:700;margin:10px 0 4px}
   .foot p{font-size:10.5px;margin:2px 0;line-height:1.6}
@@ -471,6 +472,7 @@ function render(){
     +'<hr class="total-rule">'
     +'<div class="sign"><span class="prefix">SIGN</span><span class="line"><span class="name">'
     +   esc(co.nameZh)+(co.nameEn?' '+esc(co.nameEn):'')+'</span></span></div>'
+    +'<div class="sign-space"></div>'
     +'<div class="foot">'
     +  '<hr class="frule">'
     +  '<h4>付款資訊</h4>'
@@ -544,7 +546,7 @@ document.getElementById('showSign').onchange=e=>{state.showSign=e.target.checked
 /* ---------------- 可拖曳蓋章 / 簽名 ---------------- */
 const PAGE_W = 210/25.4*96;   // A4 闊度（CSS px, 96dpi）= 793.7
 function saveCompaniesSilent(){ localStorage.setItem(LS_CO, JSON.stringify(companies)); }
-function defPos(type){ return type==='stamp' ? {x:515,y:905,w:150} : {x:455,y:862,w:185}; }
+function defPos(type){ return type==='stamp' ? {x:560,y:398,w:150} : {x:520,y:375,w:190}; }
 function getPos(cid,type){
   const co=companies[cid], k=type+'Pos';
   if(!co[k] || typeof co[k].x!=='number') co[k]=defPos(type);
