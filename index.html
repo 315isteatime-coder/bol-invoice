@@ -133,8 +133,13 @@
   .sign .line{display:inline-block;min-width:60mm;border-top:1.4px solid #111;padding-top:4px;position:relative;z-index:1}
   .sign .prefix{font-size:12px;font-weight:700;margin-right:8px}
   .sign .name{font-size:12.5px;font-weight:700}
-  .sign .sig-img{position:absolute;right:30mm;bottom:9mm;max-width:70mm;mix-blend-mode:multiply;pointer-events:none;z-index:2}
-  .sign .stamp-img{position:absolute;right:6mm;bottom:0;max-width:52mm;opacity:.92;mix-blend-mode:multiply;pointer-events:none;transform:rotate(-7deg);z-index:3}
+  /* 可拖曳蓋章 / 簽名圖層 */
+  .mark{position:absolute;cursor:grab;touch-action:none;z-index:6;line-height:0}
+  .mark:active{cursor:grabbing}
+  .mark img{display:block;width:100%;height:auto;mix-blend-mode:multiply;-webkit-user-drag:none;user-select:none;pointer-events:none}
+  .mark .rz{position:absolute;right:-9px;bottom:-9px;width:18px;height:18px;background:#111;border:2px solid #fff;border-radius:4px;cursor:nwse-resize;box-shadow:0 1px 4px rgba(0,0,0,.4);opacity:0;transition:.15s}
+  .mark:hover{outline:1.5px dashed rgba(75,63,160,.7);outline-offset:2px}
+  .mark:hover .rz{opacity:1}
 
   .foot{margin-top:auto;padding-top:18px}
   .foot .frule{border:0;border-top:1px solid #111;margin-bottom:8px}
@@ -148,6 +153,9 @@
     .stage{padding:0;overflow:visible}
     .stage-inner{zoom:1}
     .page{box-shadow:none;width:auto;min-height:auto;margin:0}
+    .mark{cursor:default}
+    .mark:hover{outline:none}
+    .mark .rz{display:none !important}
     @page{size:A4;margin:0}
   }
 </style>
@@ -198,10 +206,16 @@
   </div>
 
   <div class="fieldset" id="markBox">
-    <legend>蓋章 / 簽名</legend>
-    <label style="display:flex;align-items:center;gap:8px;font-size:13px"><input type="checkbox" id="showStamp" checked> 顯示公司蓋章</label>
-    <label style="display:flex;align-items:center;gap:8px;font-size:13px;margin-top:8px"><input type="checkbox" id="showSign" checked> 顯示簽名</label>
-    <p class="hint">未有圖？去下面「⚙︎ 公司設定」上載章同簽名圖（每間公司各自一套）。</p>
+    <legend>蓋章 / 簽名（套用喺目前揀嘅公司）</legend>
+    <label class="lb">上載蓋章 PNG　<button class="linkbtn" id="clrStamp">移除</button></label>
+    <input type="file" id="upStamp" accept="image/png,image/*">
+    <label class="lb">上載簽名 PNG　<button class="linkbtn" id="clrSign">移除</button></label>
+    <input type="file" id="upSign" accept="image/png,image/*">
+    <div style="margin-top:10px">
+      <label style="display:flex;align-items:center;gap:8px;font-size:13px"><input type="checkbox" id="showStamp" checked> 顯示公司蓋章</label>
+      <label style="display:flex;align-items:center;gap:8px;font-size:13px;margin-top:8px"><input type="checkbox" id="showSign" checked> 顯示簽名</label>
+    </div>
+    <p class="hint">上載後喺右邊預覽度：<b>拖動</b>張圖放位、拖<b>右下角黑點</b>拉大細。位置同大細會自動記住。建議用去背/透明底 PNG，白底都得（會自動透走）。</p>
   </div>
 
   <div class="fieldset" id="receiptBox" style="display:none">
@@ -455,10 +469,7 @@ function render(){
     + receiptHTML
     +'<div class="total"><span class="lbl">TOTAL</span><span class="val">MOP '+money(total())+'</span></div>'
     +'<hr class="total-rule">'
-    +'<div class="sign">'
-    +   ((state.showSign && co.sign)?'<img class="sig-img" style="width:'+(co.signSize||170)+'px" src="'+co.sign+'">':'')
-    +   ((state.showStamp && co.stamp)?'<img class="stamp-img" style="width:'+(co.stampSize||150)+'px" src="'+co.stamp+'">':'')
-    +   '<span class="prefix">SIGN</span><span class="line"><span class="name">'
+    +'<div class="sign"><span class="prefix">SIGN</span><span class="line"><span class="name">'
     +   esc(co.nameZh)+(co.nameEn?' '+esc(co.nameEn):'')+'</span></span></div>'
     +'<div class="foot">'
     +  '<hr class="frule">'
@@ -471,6 +482,8 @@ function render(){
     +     '<p>ADDRESS: '+esc(co.addrEn)+'</p><p>TEL: '+esc(co.tel)+'</p>'
     +  '</div>'
     +'</div>';
+
+  mountMarks();
 }
 
 /* ---------------- 控制面板事件 ---------------- */
@@ -525,8 +538,96 @@ document.getElementById('number').oninput=e=>{state.number=e.target.value;render
 document.getElementById('date').oninput=e=>{state.date=e.target.value;refreshNumber();render();};
 document.getElementById('payMethod').onchange=e=>{state.payMethod=e.target.value;render();};
 document.getElementById('payDate').oninput=e=>{state.payDate=e.target.value;render();};
-document.getElementById('showStamp').onchange=e=>{state.showStamp=e.target.checked;render();};
-document.getElementById('showSign').onchange=e=>{state.showSign=e.target.checked;render();};
+document.getElementById('showStamp').onchange=e=>{state.showStamp=e.target.checked;applyMarks();};
+document.getElementById('showSign').onchange=e=>{state.showSign=e.target.checked;applyMarks();};
+
+/* ---------------- 可拖曳蓋章 / 簽名 ---------------- */
+const PAGE_W = 210/25.4*96;   // A4 闊度（CSS px, 96dpi）= 793.7
+function saveCompaniesSilent(){ localStorage.setItem(LS_CO, JSON.stringify(companies)); }
+function defPos(type){ return type==='stamp' ? {x:515,y:905,w:150} : {x:455,y:862,w:185}; }
+function getPos(cid,type){
+  const co=companies[cid], k=type+'Pos';
+  if(!co[k] || typeof co[k].x!=='number') co[k]=defPos(type);
+  return co[k];
+}
+const markEls={};
+function ensureMarkEls(){
+  ['stamp','sign'].forEach(type=>{
+    if(markEls[type]) return;
+    const wrap=document.createElement('div'); wrap.className='mark '+type;
+    const img=document.createElement('img');
+    const rz=document.createElement('span'); rz.className='rz';
+    wrap.appendChild(img); wrap.appendChild(rz);
+    wrap.addEventListener('pointerdown',ev=>{ if(ev.target===rz) return; startDrag(type,'move',ev); });
+    rz.addEventListener('pointerdown',ev=>{ ev.stopPropagation(); startDrag(type,'resize',ev); });
+    markEls[type]={wrap,img};
+  });
+}
+function mountMarks(){
+  ensureMarkEls();
+  const page=document.getElementById('page');
+  page.appendChild(markEls.stamp.wrap);
+  page.appendChild(markEls.sign.wrap);
+  applyMarks();
+}
+function applyMarks(){
+  const co=companies[state.companyId];
+  [['stamp',state.showStamp],['sign',state.showSign]].forEach(([type,show])=>{
+    const el=markEls[type]; if(!el) return;
+    const src=co[type];
+    if(src && show){
+      const p=getPos(state.companyId,type);
+      el.wrap.style.display='block';
+      el.wrap.style.left=p.x+'px'; el.wrap.style.top=p.y+'px'; el.wrap.style.width=p.w+'px';
+      if(el.img.getAttribute('src')!==src) el.img.src=src;
+    }else{
+      el.wrap.style.display='none';
+    }
+  });
+}
+let drag=null;
+function startDrag(type,mode,ev){
+  ev.preventDefault();
+  const page=document.getElementById('page');
+  const zoom=page.getBoundingClientRect().width/PAGE_W;
+  const p=getPos(state.companyId,type);
+  drag={type,mode,zoom,sx:ev.clientX,sy:ev.clientY,orig:{x:p.x,y:p.y,w:p.w}};
+  try{ markEls[type].wrap.setPointerCapture(ev.pointerId); }catch(e){}
+  window.addEventListener('pointermove',onDrag);
+  window.addEventListener('pointerup',endDrag);
+}
+function onDrag(ev){
+  if(!drag) return;
+  const dx=(ev.clientX-drag.sx)/drag.zoom, dy=(ev.clientY-drag.sy)/drag.zoom;
+  const p=getPos(state.companyId,drag.type);
+  if(drag.mode==='move'){ p.x=Math.round(drag.orig.x+dx); p.y=Math.round(drag.orig.y+dy); }
+  else { p.w=Math.max(40,Math.min(560,Math.round(drag.orig.w+dx))); }
+  applyMarks();
+}
+function endDrag(){
+  window.removeEventListener('pointermove',onDrag);
+  window.removeEventListener('pointerup',endDrag);
+  if(drag){ drag=null; saveCompaniesSilent(); }
+}
+function wireUpload(inputId,type){
+  document.getElementById(inputId).onchange=e=>{
+    const f=e.target.files[0]; if(!f) return;
+    const r=new FileReader();
+    r.onload=()=>{
+      companies[state.companyId][type]=r.result;
+      companies[state.companyId][type+'Pos']=companies[state.companyId][type+'Pos']||defPos(type);
+      if(type==='stamp'){ state.showStamp=true; document.getElementById('showStamp').checked=true; }
+      else { state.showSign=true; document.getElementById('showSign').checked=true; }
+      saveCompaniesSilent(); applyMarks();
+      flash((type==='stamp'?'蓋章':'簽名')+'已上載，喺預覽度拖動放位');
+    };
+    r.readAsDataURL(f);
+    e.target.value='';
+  };
+}
+wireUpload('upStamp','stamp'); wireUpload('upSign','sign');
+document.getElementById('clrStamp').onclick=()=>{ companies[state.companyId].stamp=''; saveCompaniesSilent(); applyMarks(); flash('已移除蓋章'); };
+document.getElementById('clrSign').onclick=()=>{ companies[state.companyId].sign=''; saveCompaniesSilent(); applyMarks(); flash('已移除簽名'); };
 
 document.getElementById('resetSeq').onclick=()=>{resetSeq();refreshNumber();render();};
 
@@ -763,17 +864,7 @@ function openSettings(){
     });
     blk.innerHTML+='<label class="lb">Logo（PNG/JPG，可空）</label>'
       +'<input type="file" accept="image/*" data-co="'+co.id+'" data-img="logo">'
-      +(co.logo?'<img class="logo-prev" src="'+co.logo+'">':'')
-      +'<label class="lb">蓋章 章圖（PNG，白底會自動透走，可空）</label>'
-      +'<input type="file" accept="image/*" data-co="'+co.id+'" data-img="stamp">'
-      +(co.stamp?'<img class="logo-prev" src="'+co.stamp+'">':'')
-      + (co.stamp?'<button class="linkbtn" data-clear="stamp" data-co="'+co.id+'">移除章</button>':'')
-      +'<label class="lb">章大小 (px)</label><input type="number" data-co="'+co.id+'" data-k="stampSize" value="'+attr(co.stampSize||150)+'">'
-      +'<label class="lb">簽名 圖（PNG，白底會自動透走，可空）</label>'
-      +'<input type="file" accept="image/*" data-co="'+co.id+'" data-img="sign">'
-      +(co.sign?'<img class="logo-prev" src="'+co.sign+'">':'')
-      + (co.sign?'<button class="linkbtn" data-clear="sign" data-co="'+co.id+'">移除簽名</button>':'')
-      +'<label class="lb">簽名大小 (px)</label><input type="number" data-co="'+co.id+'" data-k="signSize" value="'+attr(co.signSize||170)+'">';
+      +(co.logo?'<img class="logo-prev" src="'+co.logo+'">':'');
     wrap.appendChild(blk);
   });
   wrap.querySelectorAll('input[type=file]').forEach(f=>{
