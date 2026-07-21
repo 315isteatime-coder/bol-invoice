@@ -86,9 +86,10 @@
   .stage{flex:1;overflow:auto;padding:28px;display:flex;justify-content:center;align-items:flex-start}
   .stage-inner{zoom:.82}
 
-  .page{
+  #page{display:flex;flex-direction:column;align-items:center;gap:26px}
+  .sheet{
     width:210mm;height:297mm;background:#fff;color:#111;
-    padding:15mm 15mm 20mm;position:relative;
+    padding:15mm 15mm 20mm;position:relative;overflow:hidden;
     box-shadow:0 6px 30px rgba(0,0,0,.18);
     display:flex;flex-direction:column;
     -webkit-print-color-adjust:exact;print-color-adjust:exact;
@@ -154,7 +155,9 @@
     .controls,.modal-bg{display:none !important}
     .stage{display:block;padding:0;margin:0;overflow:visible}
     .stage-inner{zoom:1;display:block}
-    .page{box-shadow:none;margin:0;height:296mm;overflow:hidden;break-inside:avoid;page-break-inside:avoid}
+    #page{display:block;gap:0}
+    .sheet{box-shadow:none;margin:0;height:296mm;overflow:hidden;break-inside:avoid;page-break-inside:avoid;break-after:page;page-break-after:always}
+    .sheet:last-child{break-after:auto;page-break-after:auto}
     .mark{cursor:default}
     .mark:hover{outline:none}
     .mark .rz{display:none !important}
@@ -256,7 +259,7 @@
 <!-- ================= A4 預覽 ================= -->
 <div class="stage">
   <div class="stage-inner">
-    <div class="page" id="page"></div>
+    <div id="page"></div>
   </div>
 </div>
 
@@ -420,32 +423,29 @@ function render(){
           + (co.nameEn?'<div class="co-en">'+esc(co.nameEn)+'</div>':'');
   }
 
-  // 表格
-  let tableHTML;
+  // 表格 thead + 逐行（分開，方便分頁）
+  let theadHTML, rowHTMLs;
   if(state.layout==='simple'){
-    let rows = state.items.map(it=>
+    theadHTML='<thead><tr><th>invoice date</th><th class="num">AMOUNT(MOP)</th></tr></thead>';
+    rowHTMLs=state.items.map(it=>
       '<tr><td>'+esc(it.label||'')+'</td>'
-      +'<td class="num">'+money(it.amount)+'</td></tr>').join('');
-    tableHTML =
-      '<table class="items-t"><thead><tr>'
-      +'<th>invoice date</th><th class="num">AMOUNT(MOP)</th>'
-      +'</tr></thead><tbody>'+rows+'</tbody></table>';
+      +'<td class="num">'+money(it.amount)+'</td></tr>');
   }else{
-    let rows = state.items.map(it=>{
+    theadHTML='<thead><tr>'
+      +'<th>項目描述 (DESCRIPTION)</th>'
+      +'<th class="num">數量 (QTY)</th>'
+      +'<th class="num">單價 (PRICE)</th>'
+      +'<th class="num">金額 (AMOUNT)</th>'
+      +'</tr></thead>';
+    rowHTMLs=state.items.map(it=>{
       const amt=(Number(it.qty)||0)*(Number(it.price)||0);
       return '<tr><td>'+esc(it.desc||'').replace(/\n/g,'<br>')+'</td>'
         +'<td class="num">'+(it.qty||'')+'</td>'
         +'<td class="num">'+money(it.price)+'</td>'
         +'<td class="num">'+money(amt)+'</td></tr>';
-    }).join('');
-    tableHTML =
-      '<table class="items-t"><thead><tr>'
-      +'<th>項目描述 (DESCRIPTION)</th>'
-      +'<th class="num">數量 (QTY)</th>'
-      +'<th class="num">單價 (PRICE)</th>'
-      +'<th class="num">金額 (AMOUNT)</th>'
-      +'</tr></thead><tbody>'+rows+'</tbody></table>';
+    });
   }
+  const buildTable=(rws)=>'<table class="items-t">'+theadHTML+'<tbody>'+rws.join('')+'</tbody></table>';
 
   // 收據語
   let receiptHTML='';
@@ -462,7 +462,7 @@ function render(){
   const title = isReceipt ? 'receipt' : 'invoice';
   const titleSmall = isReceipt ? '<small>收據</small>' : '';
 
-  document.getElementById('page').innerHTML =
+  const headerHTML =
     '<div class="top">'
     +  '<div class="brand'+(co.bigName?' big':'')+'">'+brand
     +     (state.attn?'<div class="attn">ATTN : '+esc(state.attn)+'</div>':'')
@@ -474,9 +474,10 @@ function render(){
     +     '<div>日期 (DATE): <b>'+fmtDate(state.date)+'</b></div>'
     +  '</div>'
     +'</div>'
-    +'<hr class="hr">'
-    + tableHTML
-    +'<div class="body-space" style="height:'+getTG(co)+'px"></div>'
+    +'<hr class="hr">';
+
+  const buildTail=(topGap)=>
+     '<div class="body-space" style="height:'+topGap+'px"></div>'
     + receiptHTML
     +'<div class="total"><span class="lbl">TOTAL</span><span class="val">MOP '+money(total())+'</span></div>'
     +'<hr class="total-rule">'
@@ -495,6 +496,37 @@ function render(){
     +     '<p>ADDRESS: '+esc(co.addrEn)+'</p><p>TEL: '+esc(co.tel)+'</p>'
     +  '</div>'
     +'</div>';
+
+  const tailHTML=buildTail(getTG(co));
+
+  // ---- 分頁：量度每行高度，太多就開多頁；TOTAL＋付款資訊擺埋一齊 ----
+  const headerH=measureH(headerHTML);
+  const tailH=measureH('<div>'+tailHTML+'</div>');
+  let pagesRows=[]; let i=0; let first=true;
+  if(rowHTMLs.length===0){ pagesRows=[[]]; }
+  while(i<rowHTMLs.length){
+    const budget=SHEET_CONTENT_H-(first?headerH:0)-8;
+    let take=[];
+    while(i<rowHTMLs.length){
+      if(measureH(buildTable(take.concat([rowHTMLs[i]])))>budget && take.length>0) break;
+      take.push(rowHTMLs[i]); i++;
+    }
+    pagesRows.push(take); first=false;
+  }
+  const onlyOne=pagesRows.length===1;
+  const usedLast=(onlyOne?headerH:0)+measureH(buildTable(pagesRows[pagesRows.length-1]));
+  const tailFits=(SHEET_CONTENT_H-usedLast-8)>=tailH;
+
+  let sheets='';
+  pagesRows.forEach((rws,idx)=>{
+    const isFirst=idx===0, isLast=idx===pagesRows.length-1;
+    let inner=(isFirst?headerHTML:'')+buildTable(rws);
+    if(isLast && tailFits) inner+=tailHTML;
+    sheets+='<div class="sheet">'+inner+'</div>';
+  });
+  if(!tailFits) sheets+='<div class="sheet">'+buildTail(24)+'</div>';
+
+  document.getElementById('page').innerHTML=sheets;
 
   mountMarks();
   syncLayoutSliders();
@@ -557,6 +589,13 @@ document.getElementById('showSign').onchange=e=>{state.showSign=e.target.checked
 
 /* ---------------- 可拖曳蓋章 / 簽名 ---------------- */
 const PAGE_W = 210/25.4*96;   // A4 闊度（CSS px, 96dpi）= 793.7
+const MM = 96/25.4;                       // px per mm
+const SHEET_CONTENT_H = (296-15-20)*MM;   // 每張 A4 可用內容高度（保守用 296mm）≈ 986px
+let _meas=null;
+function measureH(html){                   // 量度一段 HTML 喺 180mm 內容闊度下嘅高度
+  if(!_meas){ _meas=document.createElement('div'); _meas.style.cssText='position:absolute;left:-10000px;top:0;width:180mm;visibility:hidden;'; document.body.appendChild(_meas); }
+  _meas.innerHTML=html; return _meas.getBoundingClientRect().height;
+}
 function saveCompaniesSilent(){ localStorage.setItem(LS_CO, JSON.stringify(companies)); }
 function getTG(co){ return typeof co.totalGap==='number'?co.totalGap:151; }   // 金額上方空位（px）
 function getSG(co){ return typeof co.signGap==='number'?co.signGap:22; }      // 簽名欄上方空位（px）
@@ -568,11 +607,19 @@ function syncLayoutSliders(){
 }
 document.getElementById('totalGap').oninput=e=>{ companies[state.companyId].totalGap=Number(e.target.value); saveCompaniesSilent(); render(); };
 document.getElementById('signGap').oninput=e=>{ companies[state.companyId].signGap=Number(e.target.value); saveCompaniesSilent(); render(); };
-function defPos(type){ return type==='stamp' ? {x:560,y:398,w:150} : {x:520,y:375,w:190}; }
-function getPos(cid,type){
-  const co=companies[cid], k=type+'Pos';
-  if(!co[k] || typeof co[k].x!=='number') co[k]=defPos(type);
+function defRel(type){ return type==='stamp' ? {dx:50,dy:-28,w:150} : {dx:10,dy:-51,w:190}; }  // 相對 SIGN 線
+function getRel(cid,type){
+  const co=companies[cid], k=type+'Rel';
+  if(!co[k] || typeof co[k].dx!=='number') co[k]=defRel(type);
   return co[k];
+}
+function signAnchor(){                     // SIGN 線左上角相對 host（未縮放 px）
+  const host=markHost||document.getElementById('page');
+  const el=host.querySelector && (host.querySelector('.sign .line')||host.querySelector('.sign'));
+  const hr=host.getBoundingClientRect(); const zoom=(hr.width/PAGE_W)||1;
+  if(!el) return {x:500,y:400};
+  const r=el.getBoundingClientRect();
+  return { x:(r.left-hr.left)/zoom, y:(r.top-hr.top)/zoom };
 }
 const markEls={};
 function ensureMarkEls(){
@@ -587,22 +634,25 @@ function ensureMarkEls(){
     markEls[type]={wrap,img};
   });
 }
+let markHost=null;
 function mountMarks(){
   ensureMarkEls();
-  const page=document.getElementById('page');
-  page.appendChild(markEls.stamp.wrap);
-  page.appendChild(markEls.sign.wrap);
+  const signEl=document.querySelector('#page .sign');
+  markHost = (signEl && signEl.closest('.sheet')) || document.querySelector('#page .sheet:last-child') || document.getElementById('page');
+  markHost.appendChild(markEls.stamp.wrap);
+  markHost.appendChild(markEls.sign.wrap);
   applyMarks();
 }
 function applyMarks(){
   const co=companies[state.companyId];
+  const a=signAnchor();
   [['stamp',state.showStamp],['sign',state.showSign]].forEach(([type,show])=>{
     const el=markEls[type]; if(!el) return;
     const src=co[type];
     if(src && show){
-      const p=getPos(state.companyId,type);
+      const rel=getRel(state.companyId,type);
       el.wrap.style.display='block';
-      el.wrap.style.left=p.x+'px'; el.wrap.style.top=p.y+'px'; el.wrap.style.width=p.w+'px';
+      el.wrap.style.left=(a.x+rel.dx)+'px'; el.wrap.style.top=(a.y+rel.dy)+'px'; el.wrap.style.width=rel.w+'px';
       if(el.img.getAttribute('src')!==src) el.img.src=src;
     }else{
       el.wrap.style.display='none';
@@ -612,10 +662,10 @@ function applyMarks(){
 let drag=null;
 function startDrag(type,mode,ev){
   ev.preventDefault();
-  const page=document.getElementById('page');
+  const page=markHost||document.getElementById('page');
   const zoom=page.getBoundingClientRect().width/PAGE_W;
-  const p=getPos(state.companyId,type);
-  drag={type,mode,zoom,sx:ev.clientX,sy:ev.clientY,orig:{x:p.x,y:p.y,w:p.w}};
+  const p=getRel(state.companyId,type);
+  drag={type,mode,zoom,sx:ev.clientX,sy:ev.clientY,orig:{dx:p.dx,dy:p.dy,w:p.w}};
   try{ markEls[type].wrap.setPointerCapture(ev.pointerId); }catch(e){}
   window.addEventListener('pointermove',onDrag);
   window.addEventListener('pointerup',endDrag);
@@ -623,8 +673,8 @@ function startDrag(type,mode,ev){
 function onDrag(ev){
   if(!drag) return;
   const dx=(ev.clientX-drag.sx)/drag.zoom, dy=(ev.clientY-drag.sy)/drag.zoom;
-  const p=getPos(state.companyId,drag.type);
-  if(drag.mode==='move'){ p.x=Math.round(drag.orig.x+dx); p.y=Math.round(drag.orig.y+dy); }
+  const p=getRel(state.companyId,drag.type);
+  if(drag.mode==='move'){ p.dx=Math.round(drag.orig.dx+dx); p.dy=Math.round(drag.orig.dy+dy); }
   else { p.w=Math.max(40,Math.min(560,Math.round(drag.orig.w+dx))); }
   applyMarks();
 }
@@ -639,7 +689,7 @@ function wireUpload(inputId,type){
     const r=new FileReader();
     r.onload=()=>{
       companies[state.companyId][type]=r.result;
-      companies[state.companyId][type+'Pos']=companies[state.companyId][type+'Pos']||defPos(type);
+      companies[state.companyId][type+'Rel']=companies[state.companyId][type+'Rel']||defRel(type);
       if(type==='stamp'){ state.showStamp=true; document.getElementById('showStamp').checked=true; }
       else { state.showSign=true; document.getElementById('showSign').checked=true; }
       saveCompaniesSilent(); applyMarks();
