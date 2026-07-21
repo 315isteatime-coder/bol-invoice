@@ -660,7 +660,7 @@ function refreshNumber(){
   document.getElementById('number').value=state.number;
   const co=companies[state.companyId];
   const example = co.numFmt==='bolt' ? '序號/年-月 (例 01/2026-04)' : '年年月月序 (例 260602)';
-  document.getElementById('numHint').textContent='自動流水號格式：'+example+'。撳「下一號」會累進；可手動改。';
+  document.getElementById('numHint').textContent='自動流水號（'+example+'）：每出一張（列印/存 PDF 或存到歷史）就自動跳下一個，唔使手動改；有需要先手動改或撳「重設」。';
 }
 
 /* ---------------- 項目編輯 ---------------- */
@@ -753,6 +753,7 @@ function saveToHistory(silent){
     arr.push(rec);
     state.editId=rec.id;
     updateEditingTag();
+    bumpSeq();            // 出咗一張新單 → 流水號自動跳下一個
   }
   saveHistArr(arr);
   if(!silent) flash('已存到歷史');
@@ -853,11 +854,16 @@ document.getElementById('histFilterCo').onchange=renderHistList;
 document.getElementById('histFilterDoc').onchange=renderHistList;
 
 /* ---------------- 動作按鈕 ---------------- */
-document.getElementById('printBtn').onclick=()=>{ if(hasContent()) saveToHistory(true); window.print(); };
+document.getElementById('printBtn').onclick=()=>{
+  const issuedNew = hasContent() && !state.editId;   // 係新單先會跳號
+  if(hasContent()) saveToHistory(true);
+  const issuedNo = state.number;
+  window.print();
+  if(issuedNew) flash('已出單 '+issuedNo+'，下一張自動跳下一個編號');
+};
 
 document.getElementById('nextBtn').onclick=()=>{
-  if(hasContent()) saveToHistory(true);   // 存返舊嗰張
-  bumpSeq();
+  if(hasContent()) saveToHistory(true);   // 存返舊嗰張（新單會自動跳號，唔使再 bump）
   state.editId=null; updateEditingTag();
   state.customer=''; state.attn='';
   state.items=[]; addItemRow();
