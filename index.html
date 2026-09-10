@@ -414,16 +414,28 @@
     margin:24px auto 56px;width:max-content;
   }
 
-  /* 窄螢幕／手機：面板疊喺上面，唔好橫向爆版 */
-  @media (max-width:900px){
+  /* 中窄窗（641–1100px）：保持左右並排，面板收窄畀返位張單 */
+  @media (max-width:1100px){
+    .controls{width:344px;min-width:344px;padding:0 16px 0}
+    .actions{margin:16px -16px 0;padding:12px 16px 22px}
+  }
+  @media (max-width:820px){
+    .controls{width:300px;min-width:300px}
+    .card{padding:12px}
+    .qp{grid-template-columns:.8fr 1fr 1fr;gap:6px}
+  }
+
+  /* 真手機（≤640px）先疊上下；面板封頂，唔好將張單推到千幾px落面 */
+  @media (max-width:640px){
     body{display:block}
     .controls{
-      width:auto;min-width:0;height:auto;position:static;
+      width:auto;min-width:0;height:auto;position:static;overflow:auto;
       border-right:0;border-bottom:1px solid var(--line-2);
       padding:0 16px 0;
     }
     .actions{position:static;margin:16px -16px 0;padding:12px 16px 20px}
     .actions::before{display:none}
+    .controls{max-height:72vh}
     .stage-bar{padding:9px 14px}
     .stage-inner{margin:16px auto 40px}
     /* 掂撳目標 ≥44px；輸入框 16px 防 iOS 對焦自動放大 */
@@ -1617,6 +1629,14 @@ document.getElementById('zoomIn').onclick=()=>{ zoomLevel=applyZoom((zoomLevel||
 document.getElementById('zoomOut').onclick=()=>{ zoomLevel=applyZoom((zoomLevel||DEFAULT_ZOOM)-.08,true); };
 document.getElementById('zoomFit').onclick=fitZoom;
 addEventListener('resize',()=>{ if(!zoomLevel) autoZoom(); });
+// 視窗／面板闊度一變就重新計「合適」縮放（resize 事件唔係次次可靠）
+if(window.ResizeObserver){
+  let rzT=null;
+  new ResizeObserver(()=>{
+    if(zoomLevel) return;                 // 手動設過就唔好郁佢
+    clearTimeout(rzT); rzT=setTimeout(autoZoom,120);
+  }).observe(document.querySelector('.stage'));
+}
 
 document.getElementById('helpBtn').onclick=(e)=>{
   const p=document.getElementById('helpPanel');
