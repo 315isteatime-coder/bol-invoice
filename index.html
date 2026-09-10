@@ -42,9 +42,8 @@
 
   /* ---------- 左邊控制面板（只喺螢幕見，列印時收埋） ---------- */
   .controls{
-    order:2;
     width:388px;min-width:388px;background:var(--panel);
-    border-left:1px solid var(--line-2);
+    border-right:1px solid var(--line-2);
     padding:0 20px 0;
     overflow:auto;height:100vh;position:sticky;top:0;
     font-family:var(--ui);
@@ -374,7 +373,7 @@
   }
 
   /* ---------- 右邊 A4 預覽 / 列印區 ---------- */
-  .stage{order:1;flex:1;overflow:auto;display:flex;flex-direction:column;background:var(--app-bg)}
+  .stage{flex:1;overflow:auto;display:flex;flex-direction:column;background:var(--app-bg)}
   .stage-bar{
     position:sticky;top:0;z-index:5;
     display:flex;align-items:center;gap:10px;
@@ -419,8 +418,8 @@
   @media (max-width:900px){
     body{display:block}
     .controls{
-      order:0;width:auto;min-width:0;height:auto;position:static;
-      border-left:0;border-bottom:1px solid var(--line-2);
+      width:auto;min-width:0;height:auto;position:static;
+      border-right:0;border-bottom:1px solid var(--line-2);
       padding:0 16px 0;
     }
     .actions{position:static;margin:16px -16px 0;padding:12px 16px 20px}
